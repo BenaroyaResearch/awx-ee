@@ -5,9 +5,15 @@ on:
     # build and push anytime commits are merged to devel
     branches:
       - devel
-  schedule:
-    # build every 12 hours
-    - cron: '0 */12 * * *'
+  # schedule:
+  #   # build every 12 hours
+  #   - cron: '0 */12 * * *'
+  pull_request:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: benaroyaresearch/awx-ee-bri
+  VULN_SEVERITY: "CRITICAL,HIGH"
 
 jobs:
   build_and_push_latest:
@@ -25,17 +31,90 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Quay login
-        run: |
-          echo "${{ secrets.QUAY_TOKEN }}" | docker login quay.io -u ${{ secrets.QUAY_USERNAME }} --password-stdin
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3.8.0
 
-      - name: Build and push image
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3.3.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5.5.1
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value={{branch}}-{{sha}}-{{date 'YYYYMMDDHHmmss' tz='America/Los_Angeles'}},enable=${{ github.event_name == 'push' }}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,format=long
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and export to Docker
+        uses: docker/build-push-action@v6.9.0
+        with:
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}'
+          format: 'table'
+          # exit-code: '1'
+          # ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: ${{ env.VULN_SEVERITY }}
+          hide-progress: true
+          output: trivy.txt
+
+      - name: Publish Trivy Output to Summary
+        if: always()
         run: |
-          docker buildx create --name awx-ee-buildx
-          docker buildx use awx-ee-buildx
-          ansible-builder create -v3 --output-file=Dockerfile
-          docker buildx build \
-            --push \
-            --platform=linux/amd64,linux/arm64 \
-            --tag=${{ vars.IMAGE_REGISTRY }}/awx-ee:latest \
-            context
+          if [[ -s trivy.txt ]]; then
+            {
+              echo "### Security Output"
+              echo "<details><summary>Click to expand</summary>"
+              echo ""
+              echo '```terraform'
+              cat trivy.txt
+              echo '```'
+              echo "</details>"
+            } >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Scan image in a private registry
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}'
+          scan-type: image
+          format: 'github'
+          output: 'dependency-results.sbom.json'
+          github-pat: ${{ secrets.GITHUB_TOKEN }}
+          severity: ${{ env.VULN_SEVERITY }}
+          scanners: "vuln"
+          skip-setup-trivy: true
+
+      - name: Upload trivy report as a Github artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-sbom-report
+          path: '${{ github.workspace }}/dependency-results.sbom.json'
+          retention-days: 20 # 90 is the default
+
+      - name: Build and push Docker image
+        id: docker_build
+        uses: docker/build-push-action@v6.9.0
+        with:
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

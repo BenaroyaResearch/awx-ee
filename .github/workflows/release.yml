@@ -43,7 +43,7 @@ jobs:
           tags: |
             type=raw,value={{branch}}-{{sha}}-{{date 'YYYYMMDDHHmmss' tz='America/Los_Angeles'}},enable=${{ github.event_name == 'push' }}
             type=sha,format=long
-            type=ref,event=release
+            type=ref,event=tag
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.29.0

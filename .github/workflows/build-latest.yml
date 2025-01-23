@@ -8,8 +8,6 @@ on:
   # schedule:
   #   # build every 12 hours
   #   - cron: '0 */12 * * *'
-  
-  pull_request:
 
 env:
   REGISTRY: ghcr.io
@@ -110,6 +108,22 @@ jobs:
           path: '${{ github.workspace }}/dependency-results.sbom.json'
           retention-days: 20 # 90 is the default
 
+
+      # - name: Build and push image
+      #   run: |
+      #     docker buildx create --name awx-ee-buildx
+      #     docker buildx use awx-ee-buildx
+      #     ansible-builder create -v3 --output-file=Dockerfile
+      #     docker buildx build \
+      #       --push \
+      #       --platform=linux/amd64,linux/arm64 \
+      #       --tag=${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}:latest \
+      #       context
+
+      - name: Build dockerfile
+        run: |
+          ansible-builder create -v3 --output-file=Dockerfile
+          
       - name: Build and push Docker image
         id: docker_build
         uses: docker/build-push-action@v6.9.0

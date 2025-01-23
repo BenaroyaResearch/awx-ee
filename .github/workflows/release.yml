@@ -42,8 +42,6 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value={{branch}}-{{sha}}-{{date 'YYYYMMDDHHmmss' tz='America/Los_Angeles'}},enable=${{ github.event_name == 'push' }}
-            type=ref,event=branch
-            type=ref,event=pr
             type=sha,format=long
             type=ref,event=release
 

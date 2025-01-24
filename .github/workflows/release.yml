@@ -41,55 +41,53 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value={{branch}}-{{sha}}-{{date 'YYYYMMDDHHmmss' tz='America/Los_Angeles'}},enable=${{ github.event_name == 'push' }}
-            type=sha,format=long
             type=ref,event=tag
 
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.29.0
-        with:
-          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}'
-          format: 'table'
-          # exit-code: '1'
-          # ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: ${{ env.VULN_SEVERITY }}
-          hide-progress: true
-          output: trivy.txt
+      # - name: Run Trivy vulnerability scanner
+      #   uses: aquasecurity/trivy-action@0.29.0
+      #   with:
+      #     image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.release.tag_name }}'
+      #     format: 'table'
+      #     # exit-code: '1'
+      #     # ignore-unfixed: true
+      #     vuln-type: 'os,library'
+      #     severity: ${{ env.VULN_SEVERITY }}
+      #     hide-progress: true
+      #     output: trivy.txt
 
-      - name: Publish Trivy Output to Summary
-        if: always()
-        run: |
-          if [[ -s trivy.txt ]]; then
-            {
-              echo "### Security Output"
-              echo "<details><summary>Click to expand</summary>"
-              echo ""
-              echo '```terraform'
-              cat trivy.txt
-              echo '```'
-              echo "</details>"
-            } >> $GITHUB_STEP_SUMMARY
-          fi
+      # - name: Publish Trivy Output to Summary
+      #   if: always()
+      #   run: |
+      #     if [[ -s trivy.txt ]]; then
+      #       {
+      #         echo "### Security Output"
+      #         echo "<details><summary>Click to expand</summary>"
+      #         echo ""
+      #         echo '```terraform'
+      #         cat trivy.txt
+      #         echo '```'
+      #         echo "</details>"
+      #       } >> $GITHUB_STEP_SUMMARY
+      #     fi
 
-      - name: Scan image in a private registry
-        uses: aquasecurity/trivy-action@0.29.0
-        with:
-          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}'
-          scan-type: image
-          format: 'github'
-          output: 'dependency-results.sbom.json'
-          github-pat: ${{ secrets.GITHUB_TOKEN }}
-          severity: ${{ env.VULN_SEVERITY }}
-          scanners: "vuln"
-          skip-setup-trivy: true
+      # - name: Scan image in a private registry
+      #   uses: aquasecurity/trivy-action@0.29.0
+      #   with:
+      #     image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}'
+      #     scan-type: image
+      #     format: 'github'
+      #     output: 'dependency-results.sbom.json'
+      #     github-pat: ${{ secrets.GITHUB_TOKEN }}
+      #     severity: ${{ env.VULN_SEVERITY }}
+      #     scanners: "vuln"
+      #     skip-setup-trivy: true
 
-      - name: Upload trivy report as a Github artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-sbom-report
-          path: '${{ github.workspace }}/dependency-results.sbom.json'
-          retention-days: 20 # 90 is the default
+      # - name: Upload trivy report as a Github artifact
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: trivy-sbom-report
+      #     path: '${{ github.workspace }}/dependency-results.sbom.json'
+      #     retention-days: 20 # 90 is the default
 
       - name: Build and push Docker image
         id: docker_build
